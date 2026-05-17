@@ -5,6 +5,7 @@ import os
 from flask_bcrypt import Bcrypt
 from authlib.integrations.flask_client import OAuth
 from datetime import datetime
+from bson.objectid import ObjectId
 
 load_dotenv()
 
@@ -254,6 +255,56 @@ def book_resource():
         
     bookings_collection.insert_one(booking_data)
     return "Booking successful"
+
+#Cancel bookings
+@app.route('/cancel-booking/<booking_id>')
+def cancel_booking(booking_id):
+    if "user_email" not in session:
+        return redirect(url_for("login"))
+    
+    booking = bookings_collection.find_one({
+        "_id" : ObjectId(booking_id)
+    })
+
+    if not booking:
+        return "Booking Not Found"
+    
+    if booking['user_email'] != session['user_email']:
+        return "Unauthorized access"
+    
+    bookings_collection.update_one({
+        "_id" : ObjectId(booking_id)
+    },
+    {
+        "$set":{
+            "booking_status": "cancelled"
+        }
+    })
+    users_collection.update_one({
+        "email" : session["user_email"]
+    },
+    {
+        "$inc":{
+            "ghost_count": 1,
+            "reputation_score": -5
+        }
+    })
+    return "Booking cancelled successfully"
+
+#Booking history
+@app.route('/history')
+def history():
+    if "user_email" not in session:
+        return redirect(url_for("login"))
+    
+    user_email = session["user_email"]
+
+    user_bookings = bookings_collection.find({
+        "user_email" : user_email
+    })
+
+    return render_template("history.html", bookings = user_bookings)
+    
 
 
 if __name__ == '__main__':
